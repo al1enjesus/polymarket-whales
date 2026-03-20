@@ -43,6 +43,9 @@ def load_config(path: str = "config.yaml") -> dict:
             "bot_token": "",
             "chat_id": "",
         },
+        "discord": {
+            "webhook_url": "",
+        },
         "polymarket": {
             "api_url": "https://clob.polymarket.com",
         },
@@ -64,6 +67,8 @@ def load_config(path: str = "config.yaml") -> dict:
         config["telegram"]["bot_token"] = os.getenv("TELEGRAM_BOT_TOKEN")
     if os.getenv("TELEGRAM_CHAT_ID"):
         config["telegram"]["chat_id"] = os.getenv("TELEGRAM_CHAT_ID")
+    if os.getenv("DISCORD_WEBHOOK_URL"):
+        config["discord"]["webhook_url"] = os.getenv("DISCORD_WEBHOOK_URL")
     if os.getenv("MIN_TRADE_SIZE"):
         config["min_trade_size"] = float(os.getenv("MIN_TRADE_SIZE"))
 
@@ -228,6 +233,45 @@ def send_telegram_alert(bot_token: str, chat_id: str, message: str) -> bool:
         return False
 
 
+def format_discord_message(market_title: str, side: str, amount_usd: float,
+                            price: float, timestamp: str) -> str:
+    """Format a Discord alert message."""
+    ts = timestamp or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    side_emoji = "✅" if side == "YES" else "❌"
+    prob_pct = int(price * 100) if side == "YES" else int((1 - price) * 100)
+
+    return (
+        f"🐋 **WHALE ALERT**  `{ts}`\n"
+        f"{'─' * 30}\n"
+        f"**Market:** {market_title}\n"
+        f"**Side:**    {side_emoji} {side}\n"
+        f"**Amount:** `${amount_usd:,.2f}`\n"
+        f"**Price:**   `{price:.4f}` ({prob_pct}% {side})\n"
+        f"{'─' * 30}"
+    )
+
+
+def send_discord_alert(webhook_url: str, message: str) -> bool:
+    """Send a message via Discord Webhook API. Returns True on success."""
+    if not webhook_url:
+        logger.debug("Discord not configured — skipping alert.")
+        return False
+
+    payload = {
+        "content": message,
+    }
+    try:
+        resp = requests.post(webhook_url, json=payload, timeout=10)
+        resp.raise_for_status()
+        return True
+    except requests.exceptions.HTTPError as e:
+        logger.warning(f"Discord HTTP error: {e}")
+        return False
+    except Exception as e:
+        logger.warning(f"Failed to send Discord alert: {e}")
+        return False
+
+
 # ─────────────────────────────────────────────
 # Market info cache (avoid hammering the API)
 # ─────────────────────────────────────────────
@@ -262,10 +306,13 @@ def run(config: dict) -> None:
     api_url = os.getenv("POLYMARKET_API_URL", config["polymarket"]["api_url"])
     bot_token = config["telegram"]["bot_token"]
     chat_id = config["telegram"]["chat_id"]
+    discord_webhook = config["discord"]["webhook_url"]
 
     telegram_enabled = bool(bot_token and chat_id and
                             bot_token != "YOUR_BOT_TOKEN" and
                             chat_id != "YOUR_CHAT_ID")
+    discord_enabled = bool(discord_webhook and
+                           discord_webhook != "YOUR_DISCORD_WEBHOOK_URL")
 
     print(f"\n{Fore.CYAN}{'═' * 50}{Style.RESET_ALL}")
     print(f"{Fore.CYAN}🐋  Polymarket Whale Tracker — Starting up{Style.RESET_ALL}")
@@ -273,10 +320,11 @@ def run(config: dict) -> None:
     print(f"  Min trade size : {Fore.YELLOW}${min_size:,.0f}{Style.RESET_ALL}")
     print(f"  Check interval : {Fore.YELLOW}{interval}s{Style.RESET_ALL}")
     print(f"  Telegram alerts: {Fore.GREEN+'ON' if telegram_enabled else Fore.RED+'OFF'}{Style.RESET_ALL}")
+    print(f"  Discord alerts : {Fore.GREEN+'ON' if discord_enabled else Fore.RED+'OFF'}{Style.RESET_ALL}")
     print(f"{Fore.CYAN}{'═' * 50}{Style.RESET_ALL}\n")
 
-    if not telegram_enabled:
-        logger.info("ℹ️  Telegram not configured — terminal-only mode.")
+    if not (telegram_enabled or discord_enabled):
+        logger.info("ℹ️  Alerts not configured — terminal-only mode.")
 
     seen_ids: set = set()
     first_run = True
@@ -343,6 +391,13 @@ def run(config: dict) -> None:
                 ok = send_telegram_alert(bot_token, chat_id, tg_msg)
                 if ok:
                     logger.debug("✅ Telegram alert sent.")
+
+            # Send Discord alert
+            if discord_enabled:
+                ds_msg = format_discord_message(market_title, side, amount_usd, price, ts)
+                ok = send_discord_alert(discord_webhook, ds_msg)
+                if ok:
+                    logger.debug("✅ Discord alert sent.")
 
         # Update seen set (keep it bounded)
         seen_ids = new_seen
