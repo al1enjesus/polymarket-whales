@@ -2,7 +2,7 @@
 
 # 🐋 polymarket-whales
 
-**Watch where smart money moves on Polymarket — in real time.**
+CLI whale tracker for Polymarket — terminal alerts when smart money moves.
 
 [Quick Start](#-quick-start) · [Configuration](#️-configuration) · [Features](#-features) · [Contributing](#-contributing)
 
