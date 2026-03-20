@@ -10,6 +10,9 @@ import time
 import logging
 import requests
 import yaml
+import csv
+import json
+import argparse
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 from colorama import init, Fore, Style
@@ -272,6 +275,37 @@ def send_discord_alert(webhook_url: str, message: str) -> bool:
         return False
 
 
+
+
+def export_trade(file_path: str, trade_data: dict) -> None:
+    """Export trade data to a CSV or JSON file."""
+    if not file_path:
+        return
+
+    ext = os.path.splitext(file_path)[1].lower()
+    
+    if ext == ".csv":
+        file_exists = os.path.isfile(file_path)
+        with open(file_path, "a", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=trade_data.keys())
+            if not file_exists:
+                writer.writeheader()
+            writer.writerow(trade_data)
+    elif ext == ".json":
+        all_data = []
+        if os.path.isfile(file_path):
+            try:
+                with open(file_path, "r") as f:
+                    all_data = json.load(f)
+            except (json.JSONDecodeError, ValueError):
+                all_data = []
+        
+        all_data.append(trade_data)
+        with open(file_path, "w") as f:
+            json.dump(all_data, f, indent=2)
+    else:
+        logger.warning(f"Unsupported export format: {ext}. Use .csv or .json.")
+
 # ─────────────────────────────────────────────
 # Market info cache (avoid hammering the API)
 # ─────────────────────────────────────────────
@@ -297,7 +331,7 @@ def get_market_title(condition_id: str) -> str:
 # ─────────────────────────────────────────────
 # Main loop
 # ─────────────────────────────────────────────
-def run(config: dict) -> None:
+def run(config: dict, export_path: str = None) -> None:
     """Main monitoring loop."""
     min_size = float(config["min_trade_size"])
     interval = int(config["check_interval"])
@@ -413,9 +447,11 @@ def run(config: dict) -> None:
 # Entry point
 # ─────────────────────────────────────────────
 if __name__ == "__main__":
-    cfg_path = "config.yaml"
-    if len(sys.argv) > 1:
-        cfg_path = sys.argv[1]
+    parser = argparse.ArgumentParser(description="Polymarket Whale Tracker")
+    parser.add_argument("--config", default="config.yaml", help="Path to YAML config file")
+    parser.add_argument("--export", help="Export path for whale trades (.csv or .json)")
+    args = parser.parse_args()
+    cfg_path = args.config
 
     config = load_config(cfg_path)
 
