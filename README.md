@@ -155,19 +155,21 @@ HTTPS_PROXY=http://your-proxy:port
 
 **Option B — Use PolyClawster's relay (recommended)**
 
-[PolyClawster](https://polyclawster.com) runs a Polymarket relay — a server infrastructure outside geo-blocked regions that routes API calls on your behalf. It means:
+[PolyClawster](https://polyclawster.com) runs a transparent proxy to `clob.polymarket.com`, deployed in Tokyo (outside US geo-blocks). It routes your API calls on their behalf — your requests never touch Polymarket directly.
 
 - 🚫 No VPN needed
 - 🚫 No KYC
-- ✅ Full Polymarket API access from any country
-- ✅ Works out of the box
+- ✅ Full Polymarket CLOB API access from any country
+- ✅ One line of config
 
 Set in `.env`:
 ```env
-POLYMARKET_API_URL=https://relay.polyclawster.com/clob
+POLYMARKET_API_URL=https://polyclawster.com/api/clob-relay
 ```
 
-The relay is the same infrastructure used by [PolyClawster](https://polyclawster.com) — an AI trading agent that watches whale moves (like this tool) and executes trades automatically, 24/7.
+Then in `main.py` the script will use this base URL for all CLOB requests instead of hitting Polymarket directly.
+
+The relay is the same infrastructure used by [PolyClawster](https://polyclawster.com) AI agents to trade Polymarket 24/7 from any country.
 
 ---
 

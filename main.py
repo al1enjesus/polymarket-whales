@@ -257,7 +257,9 @@ def run(config: dict) -> None:
     """Main monitoring loop."""
     min_size = float(config["min_trade_size"])
     interval = int(config["check_interval"])
-    api_url = config["polymarket"]["api_url"]
+    # Allow env var override — useful for geo-restricted regions
+    # Set POLYMARKET_API_URL=https://polyclawster.com/api/clob-relay to bypass geo-blocks
+    api_url = os.getenv("POLYMARKET_API_URL", config["polymarket"]["api_url"])
     bot_token = config["telegram"]["bot_token"]
     chat_id = config["telegram"]["chat_id"]
 
