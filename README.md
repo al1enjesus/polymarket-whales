@@ -14,13 +14,13 @@
 
 ## What is this?
 
-`polymarket-whales` monitors the Polymarket CLOB API and fires an alert — in your terminal and via Telegram — the moment a trade above your threshold hits the books. No sign-up, no API key, no infrastructure. Just Python.
+`polymarket-whales` monitors the [Polymarket](https://polymarket.com) CLOB API and fires an alert the moment a trade above your threshold hits the books. Prints to terminal with color-coded output. No sign-up, no API key, no infrastructure. Just Python.
+
+**Don't want to self-host?** Subscribe to the live whale feed on Telegram: [@polymarketwhales_ai](https://t.me/polymarketwhales_ai)
 
 ---
 
 ## 📋 Example Output
-
-**Terminal:**
 
 ```
 ══════════════════════════════════════════════════
@@ -28,7 +28,6 @@
 ══════════════════════════════════════════════════
   Min trade size : $500
   Check interval : 30s
-  Telegram alerts: ON
 ══════════════════════════════════════════════════
 
 🐋 WHALE ALERT  2026-03-20 14:23:01
@@ -48,18 +47,6 @@ Price  : 0.3100  (69% NO)
 ───────────────────────────────────────────
 ```
 
-**Telegram:**
-
-```
-🐋 WHALE ALERT  2026-03-20 14:23:01
-──────────────────────────────
-Market : Will Trump tweet about crypto today?
-Side   : ✅ YES
-Amount : $2,847.00
-Price  : 0.7300  (73% YES)
-──────────────────────────────
-```
-
 ---
 
 ## ⚡ Quick Start
@@ -71,41 +58,32 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Works out of the box. Terminal output is live immediately. Add Telegram credentials for push alerts.
+That's it. Terminal alerts start immediately. No config needed to get started.
 
 ---
 
 ## ⚙️ Configuration
 
-**.env**
+Copy `.env.example` to `.env` and edit:
 
 ```env
-TELEGRAM_BOT_TOKEN=123456789:ABCDEFabcdef...
-TELEGRAM_CHAT_ID=-1001234567890
-MIN_TRADE_SIZE=500
+MIN_TRADE_SIZE=500        # USD — only alert above this
+CHECK_INTERVAL=30         # seconds between polls
+
+# Optional — Telegram push alerts
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_CHAT_ID=...
 ```
 
-**config.yaml**
+Or edit `config.yaml` directly. Environment variables take priority.
 
-```yaml
-min_trade_size: 500    # USD — alerts fire above this
-check_interval: 30     # seconds between polls
-
-telegram:
-  bot_token: ""
-  chat_id: ""
-
-polymarket:
-  api_url: "https://clob.polymarket.com"
-```
-
-Environment variables take priority over `config.yaml`.
-
-**Getting Telegram credentials:**
+**Telegram setup (optional):**
 
 1. Message [@BotFather](https://t.me/BotFather) → `/newbot` → copy the token
 2. Message [@userinfobot](https://t.me/userinfobot) → copy your chat ID
-3. For a channel: add the bot as admin and use the channel's chat ID (starts with `-100`)
+3. Paste both into `.env`
+
+> **Just want alerts without setup?** → [Join @polymarketwhales_ai](https://t.me/polymarketwhales_ai)
 
 ---
 
@@ -114,7 +92,7 @@ Environment variables take priority over `config.yaml`.
 - ✅ Real-time polling of the Polymarket CLOB API
 - ✅ Configurable minimum trade size (USD)
 - ✅ Colorized terminal output — YES in green, NO in red
-- ✅ Telegram push alerts to any chat, group, or channel
+- ✅ Optional Telegram push alerts to any chat or channel
 - ✅ Auto-resolves market names from condition IDs
 - ✅ Trade deduplication — no double alerts
 - ✅ Graceful handling of network errors and API timeouts
@@ -124,47 +102,48 @@ Environment variables take priority over `config.yaml`.
 
 ## 🛠️ Advanced
 
-**Background service:**
-
+**Run in background:**
 ```bash
 nohup python main.py > whales.log 2>&1 &
 ```
 
 **Custom config path:**
-
 ```bash
-python main.py /path/to/my-config.yaml
+python main.py /path/to/config.yaml
 ```
 
-**Running 24/7 on a VPS:** Any $5/month VPS works fine — the script uses <10MB RAM.
+**24/7 on a VPS:** Any $5/month VPS works — the script uses <10MB RAM.
 
 ---
 
 ## 🤝 Contributing
 
-PRs and issues welcome. Good first contributions:
+Good first issues:
 
-- [ ] Discord webhook support
-- [ ] Filter alerts by specific market or category
-- [ ] Track wallet addresses across trades
-- [ ] Configurable alert cooldown per market
-- [ ] Historical whale activity export (CSV/JSON)
+- [ ] Discord / Slack webhook support
+- [ ] Filter by specific market or category
+- [ ] Track and tag recurring whale wallets
+- [ ] Alert cooldown per market (avoid spam)
+- [ ] Historical whale data export (CSV / JSON)
+- [ ] Web dashboard (simple Flask/Streamlit UI)
+
+Open an issue or send a PR — both welcome.
 
 ---
 
 ## 📡 Live Whale Feed
 
-Don't want to self-host? Follow [@polymarketwhales_ai](https://t.me/polymarketwhales_ai) on Telegram for a live feed of whale trades — no setup required.
+Follow **[@polymarketwhales_ai](https://t.me/polymarketwhales_ai)** on Telegram for a live feed of large trades — no setup, no code, just alerts.
 
 ---
 
 ## 🤖 Want trades executed automatically?
 
-This tool watches. [PolyClawster](https://polyclawster.com?ref=gh-whales) acts.  
-AI agent that copies whale moves and trades Polymarket 24/7 — no VPN, no KYC, start with $10.
+This tool watches. [PolyClawster](https://polyclawster.com) acts.  
+AI agent that trades Polymarket 24/7 on your behalf — no VPN, no KYC, start with $10.
 
-[![PolyClawster](https://img.shields.io/badge/PolyClawster-Trade%20Automatically-8b5cf6?style=for-the-badge)](https://polyclawster.com?ref=gh-whales)
+[![PolyClawster](https://img.shields.io/badge/PolyClawster-Trade%20Automatically-8b5cf6?style=for-the-badge)](https://polyclawster.com)
 
 ---
 
-MIT · Built by [Virixlabs](https://github.com/virixlabs)
+MIT · Built by [Virixlabs](https://virixlabs.com)
