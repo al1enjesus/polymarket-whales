@@ -112,8 +112,8 @@ def fetch_recent_trades(api_url: str, limit: int = 100) -> list:
 
 def fetch_market_info(condition_id: str) -> dict:
     """
-    Fetch market metadata (title, etc.) from Polymarket Gamma API.
-    Returns a dict with at least 'question' key.
+    Fetch market metadata (title, tags, etc.) from Polymarket Gamma API.
+    Returns a dict with at least 'question' key, and optionally 'tags' for categorization.
     """
     url = "https://gamma-api.polymarket.com/markets"
     params = {"condition_id": condition_id}
@@ -129,6 +129,64 @@ def fetch_market_info(condition_id: str) -> dict:
     except Exception as e:
         logger.debug(f"Could not fetch market info for {condition_id}: {e}")
         return {}
+
+
+def extract_categories(market_info: dict) -> list:
+    """
+    Extract category tags from market metadata.
+    Polymarket Gamma API returns tags in several possible fields:
+    - 'tags': list of category strings (primary)
+    - 'group': category group name
+    - 'category': single category string
+    Returns a list of lowercase category strings, empty if none found.
+    """
+    categories = []
+
+    # Check 'tags' field — most common
+    tags = market_info.get("tags", [])
+    if isinstance(tags, list):
+        for tag in tags:
+            if isinstance(tag, dict):
+                tag_val = tag.get("slug") or tag.get("label") or tag.get("name", "")
+            elif isinstance(tag, str):
+                tag_val = tag
+            else:
+                tag_val = str(tag)
+            if tag_val:
+                categories.append(tag_val.lower().strip())
+
+    # Check 'group' field
+    group = market_info.get("group")
+    if isinstance(group, dict):
+        group_name = group.get("name", "")
+        if group_name:
+            categories.append(group_name.lower().strip())
+    elif isinstance(group, str) and group:
+        categories.append(group.lower().strip())
+
+    # Check 'category' field
+    category = market_info.get("category", "")
+    if isinstance(category, str) and category and category not in categories:
+        categories.append(category.lower().strip())
+
+    return list(set(categories))  # Deduplicate
+
+
+def matches_filters(categories: list, allowed_categories: list) -> bool:
+    """
+    Check if any of the market's categories match the configured filter.
+    Returns True if no filter is configured (allow all) or if any category matches.
+    Returns False if a filter is configured but no categories match.
+    """
+    if not allowed_categories:
+        return True  # No filter configured — allow all
+
+    allowed_lower = [c.lower().strip() for c in allowed_categories]
+    categories_lower = [c.lower().strip() for c in categories]
+    for cat in categories_lower:
+        if cat in allowed_lower:
+            return True
+    return False
 
 
 # ─────────────────────────────────────────────
@@ -172,7 +230,7 @@ DIVIDER = "─" * 43
 
 
 def format_terminal_alert(market_title: str, side: str, amount_usd: float,
-                           price: float, timestamp: str) -> str:
+                           price: float, timestamp: str, categories: list = None) -> str:
     """Format a colorful terminal alert message."""
     ts = timestamp or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     side_color = Fore.GREEN if side == "YES" else Fore.RED
@@ -185,27 +243,33 @@ def format_terminal_alert(market_title: str, side: str, amount_usd: float,
         f"{Fore.WHITE}Side:  {Style.RESET_ALL} {side_color}{side}{Style.RESET_ALL}",
         f"{Fore.WHITE}Amount:{Style.RESET_ALL} {Fore.YELLOW}${amount_usd:,.2f}{Style.RESET_ALL}",
         f"{Fore.WHITE}Price: {Style.RESET_ALL} {price:.4f} ({side_color}{prob_pct}% {side}{Style.RESET_ALL})",
-        f"{Fore.WHITE}{DIVIDER}{Style.RESET_ALL}",
     ]
+    if categories:
+        cat_line = ", ".join(categories)
+        lines.append(f"{Fore.WHITE}Category:{Style.RESET_ALL} {Fore.MAGENTA}{cat_line}{Style.RESET_ALL}")
+    lines.append(f"{Fore.WHITE}{DIVIDER}{Style.RESET_ALL}")
     return "\n".join(lines)
 
 
 def format_telegram_message(market_title: str, side: str, amount_usd: float,
-                             price: float, timestamp: str) -> str:
+                             price: float, timestamp: str, categories: list = None) -> str:
     """Format a Telegram alert message (plain text, emoji-rich)."""
     ts = timestamp or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     side_emoji = "✅" if side == "YES" else "❌"
     prob_pct = int(price * 100) if side == "YES" else int((1 - price) * 100)
 
-    return (
+    msg = (
         f"🐋 *WHALE ALERT*  `{ts}`\n"
         f"{'─' * 30}\n"
         f"*Market:* {market_title}\n"
         f"*Side:*    {side_emoji} {side}\n"
         f"*Amount:* `${amount_usd:,.2f}`\n"
-        f"*Price:*   `{price:.4f}` ({prob_pct}% {side})\n"
-        f"{'─' * 30}"
+        f"*Price:*   `{price:.4f}` ({prob_pct}% {side})"
     )
+    if categories:
+        msg += f"\n*Category:* {', '.join(categories)}"
+    msg += f"\n{'─' * 30}"
+    return msg
 
 
 # ─────────────────────────────────────────────
@@ -237,21 +301,24 @@ def send_telegram_alert(bot_token: str, chat_id: str, message: str) -> bool:
 
 
 def format_discord_message(market_title: str, side: str, amount_usd: float,
-                            price: float, timestamp: str) -> str:
+                            price: float, timestamp: str, categories: list = None) -> str:
     """Format a Discord alert message."""
     ts = timestamp or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     side_emoji = "✅" if side == "YES" else "❌"
     prob_pct = int(price * 100) if side == "YES" else int((1 - price) * 100)
 
-    return (
+    msg = (
         f"🐋 **WHALE ALERT**  `{ts}`\n"
         f"{'─' * 30}\n"
         f"**Market:** {market_title}\n"
         f"**Side:**    {side_emoji} {side}\n"
         f"**Amount:** `${amount_usd:,.2f}`\n"
-        f"**Price:**   `{price:.4f}` ({prob_pct}% {side})\n"
-        f"{'─' * 30}"
+        f"**Price:**   `{price:.4f}` ({prob_pct}% {side})"
     )
+    if categories:
+        msg += f"\n**Category:** {', '.join(categories)}"
+    msg += f"\n{'─' * 30}"
+    return msg
 
 
 def send_discord_alert(webhook_url: str, message: str) -> bool:
@@ -310,6 +377,7 @@ def export_trade(file_path: str, trade_data: dict) -> None:
 # Market info cache (avoid hammering the API)
 # ─────────────────────────────────────────────
 _market_cache: dict = {}
+_market_categories_cache: dict = {}
 
 
 def get_market_title(condition_id: str) -> str:
@@ -326,6 +394,20 @@ def get_market_title(condition_id: str) -> str:
     )
     _market_cache[condition_id] = title
     return title
+
+
+def get_market_categories(condition_id: str) -> list:
+    """
+    Return market category tags, using a local cache to reduce API calls.
+    Returns a list of lowercase category strings.
+    """
+    if condition_id in _market_categories_cache:
+        return _market_categories_cache[condition_id]
+
+    info = fetch_market_info(condition_id)
+    categories = extract_categories(info)
+    _market_categories_cache[condition_id] = categories
+    return categories
 
 
 # ─────────────────────────────────────────────
@@ -353,6 +435,7 @@ def run(config: dict, export_path: str = None) -> None:
     print(f"{Fore.CYAN}{'═' * 50}{Style.RESET_ALL}")
     print(f"  Min trade size : {Fore.YELLOW}${min_size:,.0f}{Style.RESET_ALL}")
     print(f"  Check interval : {Fore.YELLOW}{interval}s{Style.RESET_ALL}")
+    print(f"  Categories     : {filter_display}")
     print(f"  Telegram alerts: {Fore.GREEN+'ON' if telegram_enabled else Fore.RED+'OFF'}{Style.RESET_ALL}")
     print(f"  Discord alerts : {Fore.GREEN+'ON' if discord_enabled else Fore.RED+'OFF'}{Style.RESET_ALL}")
     print(f"{Fore.CYAN}{'═' * 50}{Style.RESET_ALL}\n")
@@ -362,6 +445,13 @@ def run(config: dict, export_path: str = None) -> None:
 
     seen_ids: set = set()
     first_run = True
+
+    # Category filter
+    category_filter = config.get("filters", {}).get("categories", [])
+    if category_filter:
+        filter_display = f"{Fore.YELLOW}{', '.join(category_filter)}{Style.RESET_ALL}"
+    else:
+        filter_display = f"{Fore.GREEN}ALL{Style.RESET_ALL}"
 
     while True:
         try:
@@ -374,6 +464,7 @@ def run(config: dict, export_path: str = None) -> None:
 
         new_seen: set = set()
         whale_count = 0
+        filtered_count = 0
 
         for trade in trades:
             trade_id = trade_unique_id(trade)
@@ -391,6 +482,15 @@ def run(config: dict, export_path: str = None) -> None:
             amount_usd = parse_trade_usd_size(trade)
             if amount_usd < min_size:
                 continue
+
+            # Category filter check
+            if category_filter:
+                condition_id = trade.get("market") or trade.get("condition_id", "")
+                if condition_id:
+                    categories = get_market_categories(condition_id)
+                    if not matches_filters(categories, category_filter):
+                        filtered_count += 1
+                        continue
 
             whale_count += 1
 
@@ -413,22 +513,23 @@ def run(config: dict, export_path: str = None) -> None:
             else:
                 ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
-            # Fetch market title
+            # Fetch market title and categories
             market_title = get_market_title(condition_id) if condition_id else "Unknown Market"
+            categories = get_market_categories(condition_id) if condition_id else []
 
             # Print terminal alert
-            print(format_terminal_alert(market_title, side, amount_usd, price, ts))
+            print(format_terminal_alert(market_title, side, amount_usd, price, ts, categories or None))
 
             # Send Telegram alert
             if telegram_enabled:
-                tg_msg = format_telegram_message(market_title, side, amount_usd, price, ts)
+                tg_msg = format_telegram_message(market_title, side, amount_usd, price, ts, categories or None)
                 ok = send_telegram_alert(bot_token, chat_id, tg_msg)
                 if ok:
                     logger.debug("✅ Telegram alert sent.")
 
             # Send Discord alert
             if discord_enabled:
-                ds_msg = format_discord_message(market_title, side, amount_usd, price, ts)
+                ds_msg = format_discord_message(market_title, side, amount_usd, price, ts, categories or None)
                 ok = send_discord_alert(discord_webhook, ds_msg)
                 if ok:
                     logger.debug("✅ Discord alert sent.")
@@ -437,7 +538,9 @@ def run(config: dict, export_path: str = None) -> None:
         seen_ids = new_seen
         first_run = False
 
-        if whale_count == 0 and not first_run:
+        if whale_count == 0 and filtered_count > 0:
+            logger.info(f"All trades were filtered out this cycle (category filter: {', '.join(category_filter)}). Sleeping {interval}s...")
+        elif whale_count == 0 and not first_run:
             logger.info(f"No whale trades found this cycle. Sleeping {interval}s...")
 
         time.sleep(interval)

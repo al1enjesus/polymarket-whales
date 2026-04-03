@@ -16,3 +16,12 @@ telegram:
 
 polymarket:
   api_url: "https://clob.polymarket.com"
+
+filters:
+  # Filter whale alerts to specific market categories.
+  # Categories are matched against Polymarket market tags (case-insensitive).
+  # Common categories: politics, crypto, sports, science, business, entertainment
+  # Leave empty or omit the filters section to receive alerts for all categories.
+  categories: []
+  #   - politics
+  #   - crypto
