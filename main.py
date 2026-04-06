@@ -16,6 +16,10 @@ import argparse
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 from colorama import init, Fore, Style
+from collections import Counter
+
+# Whale wallet tag file path (can be overridden via config)
+_DEFAULT_WALLETS_FILE = "wallets.json"
 
 # Initialize colorama for cross-platform colored output
 init(autoreset=True)
@@ -42,6 +46,7 @@ def load_config(path: str = "config.yaml") -> dict:
     config = {
         "min_trade_size": 500,
         "check_interval": 30,
+        "cooldown_per_market": 0,  # seconds — 0 means no cooldown
         "telegram": {
             "bot_token": "",
             "chat_id": "",
@@ -329,12 +334,59 @@ def get_market_title(condition_id: str) -> str:
 
 
 # ─────────────────────────────────────────────
+# Whale wallet tracking
+# ─────────────────────────────────────────────
+def load_whale_wallets(wallets_file: str = _DEFAULT_WALLETS_FILE) -> dict:
+    """
+    Load known whale wallets from a local JSON file.
+    Returns a dict of {address_lower: label}.
+    Creates the file with an empty template if it doesn't exist.
+    """
+    if not os.path.exists(wallets_file):
+        default = {
+            "example_address_0x123...": "known_whale_1",
+        }
+        with open(wallets_file, "w") as f:
+            json.dump(default, f, indent=2)
+        logger.debug(f"Created default whale wallets file: {wallets_file}")
+        return {}
+
+    try:
+        with open(wallets_file, "r") as f:
+            wallets = json.load(f)
+        return {addr.lower(): label for addr, label in wallets.items()}
+    except (json.JSONDecodeError, ValueError) as e:
+        logger.warning(f"⚠️  Could not parse {wallets_file}: {e}. Starting empty.")
+        return {}
+
+
+def get_wallet_label(wallet_address: str, whale_wallets: dict) -> str:
+    """Return the label for a wallet address if it's a known whale, else empty string."""
+    if not wallet_address:
+        return ""
+    label = whale_wallets.get(wallet_address.lower(), "")
+    return label
+
+
+def detect_auto_whales(trade_wallets: list, seen_wallets: Counter, min_occurrences: int = 3) -> dict:
+    """
+    Automatically detect whale wallets that have appeared >= min_occurrences times.
+    Returns new whales as {address: f"auto_detected_x_trades"}."""
+    new_whales = {}
+    for addr, count in seen_wallets.items():
+        if count >= min_occurrences:
+            new_whales[addr] = f"auto_detected ({count} trades)"
+    return new_whales
+
+
+# ─────────────────────────────────────────────
 # Main loop
 # ─────────────────────────────────────────────
 def run(config: dict, export_path: str = None) -> None:
     """Main monitoring loop."""
     min_size = float(config["min_trade_size"])
     interval = int(config["check_interval"])
+    cooldown = int(config.get("cooldown_per_market", 0))
     # Allow env var override — useful for geo-restricted regions
     # Set POLYMARKET_API_URL=https://polyclawster.com/api/clob-relay to bypass geo-blocks
     api_url = os.getenv("POLYMARKET_API_URL", config["polymarket"]["api_url"])
@@ -353,14 +405,17 @@ def run(config: dict, export_path: str = None) -> None:
     print(f"{Fore.CYAN}{'═' * 50}{Style.RESET_ALL}")
     print(f"  Min trade size : {Fore.YELLOW}${min_size:,.0f}{Style.RESET_ALL}")
     print(f"  Check interval : {Fore.YELLOW}{interval}s{Style.RESET_ALL}")
-    print(f"  Telegram alerts: {Fore.GREEN+'ON' if telegram_enabled else Fore.RED+'OFF'}{Style.RESET_ALL}")
-    print(f"  Discord alerts : {Fore.GREEN+'ON' if discord_enabled else Fore.RED+'OFF'}{Style.RESET_ALL}")
+    print(f"  Telegram alerts  : {Fore.GREEN+'ON' if telegram_enabled else Fore.RED+'OFF'}{Style.RESET_ALL}")
+    print(f"  Discord alerts   : {Fore.GREEN+'ON' if discord_enabled else Fore.RED+'OFF'}{Style.RESET_ALL}")
+    cooldown_label = f"{Fore.YELLOW}{cooldown}s{Style.RESET_ALL}" if cooldown > 0 else f"{Fore.YELLOW}disabled{Style.RESET_ALL}"
+    print(f"  Market cooldown  : {cooldown_label}{Style.RESET_ALL}")
     print(f"{Fore.CYAN}{'═' * 50}{Style.RESET_ALL}\n")
 
     if not (telegram_enabled or discord_enabled):
         logger.info("ℹ️  Alerts not configured — terminal-only mode.")
 
     seen_ids: set = set()
+    last_alert_per_market: dict[str, float] = {}
     first_run = True
 
     while True:
@@ -416,6 +471,15 @@ def run(config: dict, export_path: str = None) -> None:
             # Fetch market title
             market_title = get_market_title(condition_id) if condition_id else "Unknown Market"
 
+            # Per-market cooldown check
+            now = time.time()
+            if cooldown > 0 and condition_id:
+                last_alert = last_alert_per_market.get(condition_id, 0)
+                if now - last_alert < cooldown:
+                    remaining = int(cooldown - (now - last_alert))
+                    logger.debug(f"Cooldown active for {market_title[:40]}... ({remaining}s remaining), skipping.")
+                    continue
+
             # Print terminal alert
             print(format_terminal_alert(market_title, side, amount_usd, price, ts))
 
@@ -432,6 +496,10 @@ def run(config: dict, export_path: str = None) -> None:
                 ok = send_discord_alert(discord_webhook, ds_msg)
                 if ok:
                     logger.debug("✅ Discord alert sent.")
+
+            # Record last alert time for cooldown tracking
+            if condition_id:
+                last_alert_per_market[condition_id] = now
 
         # Update seen set (keep it bounded)
         seen_ids = new_seen
