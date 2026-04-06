@@ -8,6 +8,11 @@ min_trade_size: 500
 # How often to check for new trades (seconds)
 check_interval: 30
 
+# Cooldown per market (seconds) — suppress duplicate alerts for the same market
+# Set to 300 to alert at most once per market every 5 minutes.
+# 0 = no cooldown (alert on every qualifying trade).
+cooldown_per_market: 0
+
 telegram:
   # Get a bot token from @BotFather on Telegram
   bot_token: "YOUR_BOT_TOKEN"
