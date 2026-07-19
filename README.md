@@ -125,6 +125,19 @@ python main.py --export whales.json
 
 ---
 
+## 📊 Web Dashboard
+
+A minimal Streamlit dashboard is available as an alternative to the terminal/Telegram/Discord alerts — useful if you just want to eyeball recent whale trades in a browser, no bot tokens required.
+
+```bash
+pip install -r requirements-dashboard.txt
+streamlit run dashboard.py
+```
+
+Features: live auto-refreshing feed, a minimum trade size slider, and a market name filter.
+
+---
+
 ## 🤝 Contributing
 
 Good first issues:
