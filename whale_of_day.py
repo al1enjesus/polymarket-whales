@@ -9,7 +9,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BOT_TOKEN  = os.getenv("TELEGRAM_BOT_TOKEN", "8721816606:AAHGpKrz2qNAoXwbguAQlEzYKj1TSkZdA4k")
+BOT_TOKEN  = os.getenv("TELEGRAM_BOT_TOKEN")
+if not BOT_TOKEN:
+    print("Error: TELEGRAM_BOT_TOKEN environment variable is not set.", file=sys.stderr)
+    sys.exit(1)
 CHAT_ID    = os.getenv("WHALE_CHANNEL_ID", "-1003518498844")
 GAMMA_API  = "https://gamma-api.polymarket.com"
 
