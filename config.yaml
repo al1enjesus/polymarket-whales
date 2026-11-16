@@ -1,6 +1,5 @@
-# ─────────────────────────────────────────────
-# 🐋 Polymarket Whale Tracker — Config
-# ─────────────────────────────────────────────
+# Polymarket Whale Tracker configuration
+# Environment variables (see .env.example) override the values in this file.
 
 # Minimum trade size in USD to trigger an alert
 min_trade_size: 500
@@ -8,11 +7,20 @@ min_trade_size: 500
 # How often to check for new trades (seconds)
 check_interval: 30
 
+# How many of the most recent matching trades to fetch per poll (max 1000).
+# Raise it if you use a low min_trade_size together with a long check_interval.
+fetch_limit: 500
+
 telegram:
   # Get a bot token from @BotFather on Telegram
   bot_token: "YOUR_BOT_TOKEN"
   # Your chat ID (use @userinfobot to find it)
   chat_id: "YOUR_CHAT_ID"
 
+discord:
+  # Server Settings > Integrations > Webhooks > New Webhook > Copy URL
+  webhook_url: "YOUR_DISCORD_WEBHOOK_URL"
+
 polymarket:
-  api_url: "https://clob.polymarket.com"
+  # Public Polymarket Data API. No API key needed.
+  api_url: "https://data-api.polymarket.com/v2"
